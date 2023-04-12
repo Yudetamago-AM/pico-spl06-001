@@ -5,7 +5,7 @@
 
 spl06_config_t config = {0x77, i2c0, BGD_PRS_TEMP};
 spl06_coef_t coef;
-int32_t prs;
+float prs;
 float temp;
 
 int main(void) {
@@ -22,7 +22,7 @@ int main(void) {
     while (1) {
         spl06_read_press_cal(&config, &coef, 64, &prs);
         spl06_read_temp_cal(&config, &coef, &temp);
-        printf("prs: %d Pa, temp: %d degC\n", prs, temp);
+        printf("prs: %f Pa, temp: %f degC\n", prs, temp);
         sleep_ms(150);
     }
 }

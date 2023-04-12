@@ -21,9 +21,9 @@ int8_t spl06_init(spl06_config_t *config, spl06_coef_t *coef) {
 
     // 104 ms per measure, 5 cm presision
     if (config->mode == CMD_PRS || config->mode == BGD_PRS || config->mode == BGD_PRS_TEMP)
-         spl06_config_prs(config, config->prs->rate, config->prs->oversample);
+         spl06_config_prs(config, 4, 64);
     if (config->mode == CMD_TEMP || config->mode == BGD_TEMP || config->mode == BGD_PRS_TEMP) 
-        spl06_config_temp(config, config->temp->rate, config->temp->oversample);
+        spl06_config_temp(config, 4, 8);
 
     // start measuring
     spl06_set_mode(config, config->mode);
@@ -321,7 +321,7 @@ void spl06_read_press_cal(spl06_config_t *config, spl06_coef_t *coef, uint8_t ov
 //printf("prs_raw: %d, temp_raw: %d\n", prs_raw, temp_raw);
 //printf("prs_sc: %d, temp_sc: %d\n", prs_sc, temp_sc);
     *prs = (float)(coef->c00) + prs_sc * ((float)(coef->c10) + prs_sc * ((float)(coef->c20) + prs_sc * (float)(coef->c30)));
-    printf("prs cal1: %f\n", *prs);
+//printf("prs cal1: %f\n", *prs);
     *prs += temp_sc * (float)(coef->c01) + prs_sc * ((float)(coef->c11) + prs_sc * (float)(coef->c21));
 }
 

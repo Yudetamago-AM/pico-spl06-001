@@ -8,30 +8,41 @@ int8_t spl06_init(spl06_config_t *config, spl06_coef_t *coef) {
     tmp[0] = SPL06_ID;
     i2c_write_blocking(config->i2c, config->addr, &tmp[0], 1, true);
     i2c_read_blocking(config->i2c, config->addr, &buf, 1, false);
-    if (buf != 0x10) return PICO_ERROR_GENERIC;
+    if (buf != 0x10) {
 #ifndef NDEBUG
-    printf("spl06: found spl06-001\n");
+        printf("spl06: no spl06-001 found\n");
 #endif
+        return PICO_ERROR_GENERIC;
+    }
 
     // read coef before measure
     ret = spl06_read_coef(config, coef);
+    if (ret < 0) {
 #ifndef NDEBUG
-    if (ret < 0) printf("coef not ready\n");
+        printf("spl06: coef not ready\n");
 #endif
+        return PICO_ERROR_GENERIC;
+    }
 
     // 104 ms per measure, 5 cm presision
     if (config->mode == CMD_PRS || config->mode == BGD_PRS || config->mode == BGD_PRS_TEMP)
-         spl06_config_prs(config, 4, 64);
+        ret = spl06_config_prs(config, config->prs_config[0], config->prs_config[1]);
     if (config->mode == CMD_TEMP || config->mode == BGD_TEMP || config->mode == BGD_PRS_TEMP) 
-        spl06_config_temp(config, 4, 8);
+        ret = spl06_config_temp(config, config->temp_config[0], config->temp_config[1]);
 
     // start measuring
-    spl06_set_mode(config, config->mode);
+    ret = spl06_set_mode(config, config->mode);
+    if (ret < 0) {
+#ifndef NDEBUG
+        printf("spl06: init fails");
+#endif
+        return PICO_ERROR_GENERIC;
+    }
 
     return 0;
 }
 
-void spl06_set_mode(spl06_config_t *config, spl06_mode_t mode) {
+int8_t spl06_set_mode(spl06_config_t *config, spl06_mode_t mode) {
     uint8_t tmp[2];
 
     tmp[0] = SPL06_MEAS_CFG;
@@ -62,7 +73,8 @@ void spl06_set_mode(spl06_config_t *config, spl06_mode_t mode) {
     default:
         break;
     }
-    i2c_write_blocking(config->i2c, config->addr, tmp, 2, false);
+    int8_t ret = i2c_write_blocking(config->i2c, config->addr, tmp, 2, false);
+    return ((ret > 0) ? (0) : (PICO_ERROR_GENERIC));
 }
 
 int8_t spl06_config_prs(spl06_config_t *config, uint8_t rate, uint8_t oversample) {
@@ -293,7 +305,7 @@ static int32_t oversample2k(uint8_t oversample) {
     return k;
 }
 
-void spl06_read_press_raw(spl06_config_t *config, int32_t *prs) {
+static void spl06_read_press_raw(spl06_config_t *config, int32_t *prs) {
     uint8_t reg;
     uint8_t buf[3];
     *prs = 0;
@@ -309,23 +321,22 @@ void spl06_read_press_raw(spl06_config_t *config, int32_t *prs) {
 //printf("prs buf: %x %x %x\n", buf[0], buf[1], buf[2]);
 }
 
-void spl06_read_press_cal(spl06_config_t *config, spl06_coef_t *coef, uint8_t oversample, float *prs) {
-    int32_t prs_raw, temp_raw, kp, kt;
+void spl06_read_press_cal(spl06_config_t *config, spl06_coef_t *coef, float *prs) {
+    int32_t prs_raw, temp_raw;
     spl06_read_press_raw(config, &prs_raw);
     spl06_read_temp_raw(config, &temp_raw);
 
-    kp = oversample2k(oversample);
-    kt = oversample2k(8);
-    float prs_sc = (float)prs_raw / kp; // scaled pressure
-    float temp_sc = (float)temp_raw / kt;
+    float prs_sc = (float)prs_raw / (float)oversample2k(config->prs_config[1]); // scaled pressure
+    float temp_sc = (float)temp_raw / (float)oversample2k(config->temp_config[1]);
 //printf("prs_raw: %d, temp_raw: %d\n", prs_raw, temp_raw);
 //printf("prs_sc: %d, temp_sc: %d\n", prs_sc, temp_sc);
     *prs = (float)(coef->c00) + prs_sc * ((float)(coef->c10) + prs_sc * ((float)(coef->c20) + prs_sc * (float)(coef->c30)));
 //printf("prs cal1: %f\n", *prs);
-    *prs += temp_sc * (float)(coef->c01) + prs_sc * ((float)(coef->c11) + prs_sc * (float)(coef->c21));
+    *prs += temp_sc * (float)(coef->c01) + temp_sc * prs_sc * (((float)(coef->c11) + prs_sc * (float)(coef->c21)));
+    *prs /= 100.0f;
 }
 
-void spl06_read_temp_raw(spl06_config_t *config, int32_t *temp) {
+static void spl06_read_temp_raw(spl06_config_t *config, int32_t *temp) {
     uint8_t reg;
     uint8_t buf[3];
     *temp = 0;
@@ -338,16 +349,14 @@ void spl06_read_temp_raw(spl06_config_t *config, int32_t *temp) {
           | (((uint32_t)buf[1]) << 8)
           | (((uint32_t)buf[0]) << 16)
           | ((buf[0] & 0x80) ? 0xFF000000 : 0));
-    // 0 1 2 2の順？データシート間違ってる？？
 //printf("temp buf: %x %x %x\n", buf[0], buf[1], buf[2]);
 }
 
 void spl06_read_temp_cal(spl06_config_t *config, spl06_coef_t *coef, float *temp) {
-    int32_t temp_raw, kt;
+    int32_t temp_raw;
     spl06_read_temp_raw(config, &temp_raw);
 
-    kt = oversample2k(8);
-    float temp_sc = (float)temp_raw / kt;
+    float temp_sc = (float)temp_raw / (float)oversample2k(config->temp_config[1]);
 //printf("temp_raw: %d / 0x%x, kt: %d, temp_sc: %f\n", temp_raw, temp_raw, kt, temp_sc);
     *temp = (float)(coef->c0) * 0.5 + (float)(coef->c1) * temp_sc;
 }

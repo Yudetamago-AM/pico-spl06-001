@@ -360,3 +360,7 @@ void spl06_read_temp_cal(spl06_config_t *config, spl06_coef_t *coef, float *temp
 //printf("temp_raw: %d / 0x%x, kt: %d, temp_sc: %f\n", temp_raw, temp_raw, kt, temp_sc);
     *temp = (float)(coef->c0) * 0.5 + (float)(coef->c1) * temp_sc;
 }
+
+float spl06_calc_alt(float prs) {
+    return (44330 * (1 - pow((prs / 1013.25), 0.190294957183634)));
+}

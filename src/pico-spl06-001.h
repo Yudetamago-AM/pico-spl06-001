@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdio.h>
+#include <math.h>
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "spl06-001-reg.h"
@@ -58,7 +59,7 @@ int8_t spl06_init(spl06_config_t *config, spl06_coef_t *coef);
  * 
  * @param config config to specify sensor to be read from
  * @param coef coefficients to compensate raw value. must set before call (set in spl06_init()).
- * @param prs read & calculated pressure value(Pa)
+ * @param prs read & calculated pressure value(hPa)
  */
 void spl06_read_press_cal(spl06_config_t *config, spl06_coef_t *coef, float *prs);
 
@@ -110,6 +111,14 @@ int8_t spl06_set_mode(spl06_config_t *config, spl06_mode_t mode);
  * @return int8_t return 0 if success, return PICO_ERROR_GENERIC if fails
  */
 int8_t spl06_read_coef(spl06_config_t *config, spl06_coef_t *coef);
+
+/**
+ * @brief calculate altitude from pressure, 1013.25 hPa reference.
+ * 
+ * @param prs pressure(hPa)
+ * @return float calculated altitude(m)
+ */
+float spl06_calc_alt(float prs);
 
 // internal functions, not allowed to call from other files
 // read raw values

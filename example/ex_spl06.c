@@ -3,10 +3,9 @@
 #include "hardware/i2c.h"
 #include "../src/pico-spl06-001.h"
 
-spl06_config_t config = {0x77, i2c0, BGD_PRS_TEMP, {4, 64}, {4, 8}};
+spl06_config_t config = {0x77, i2c0, BGD_PRS_TEMP, {2, 64}, {2, 8}};
 spl06_coef_t coef;
-float prs;
-float temp;
+float prs, temp, alt;
 
 int main(void) {
     stdio_init_all();
@@ -19,10 +18,13 @@ int main(void) {
 
     spl06_init(&config, &coef);
 
+    printf("time(ms),pressure(hPa),temperature(degC),altitude(cm)\n");
+    uint64_t time;
     while (1) {
         spl06_read_press_cal(&config, &coef, &prs);
         spl06_read_temp_cal(&config, &coef, &temp);
-        printf("prs: %4.2f Pa, temp: %2.2f degC\n", prs, temp);
+        alt = spl06_calc_alt(prs);
+        printf("%d,%4.3f,%2.2f,%.2f\n", time_us_32() / 1000, prs, temp, alt * 10);
         sleep_ms(150);
     }
 }
